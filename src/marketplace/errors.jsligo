@@ -1,0 +1,7 @@
+export const unknownViewGetBalance : string = "unknown view get_balance.";
+export const unknownViewTokenUsage : string = "unknown view token_usage.";
+export const not_owner : string = "Not owner of this token";
+export const unknown_fa2_contract : string = "Unknown FA2 contract";
+export const unknown_proposal : string = "Unknown proposal";
+export const proposal_not_active : string = "Already sold";
+export const wrong_amount : string = "You did not transfer enough tez for this nft";

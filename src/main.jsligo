@@ -1,0 +1,60 @@
+#import "storage.jsligo" "Storage"
+#import "parameter.jsligo" "Parameter"
+#import "generic_fa2/core/instance/NFT.mligo" "NFT_FA2"
+
+export type storage = Storage.t;
+export type parameter = Parameter.t;
+export type return_ = [list<operation>, storage];
+
+type store = NFT_FA2.Storage.t;
+type ext = NFT_FA2.extension;
+type extStorage = store<ext>;
+
+const generateCollection = (param: Parameter.generateCollectionParam, store: Storage.t) : return_ => {
+    // create new collection
+    let tokenIds = param.tokenIds;
+    let ledger = (Big_map.empty as NFT_FA2.Storage.Ledger.t);
+    let myfunc = ([acc, elt] : [NFT_FA2.Storage.Ledger.t, nat]) : NFT_FA2.Storage.Ledger.t => Big_map.add(elt, Tezos.get_sender (), acc);
+    let newLedger : NFT_FA2.Storage.Ledger.t = List.fold(myfunc, tokenIds, ledger);
+
+    let tokenUsage = (Big_map.empty as NFT_FA2.TokenUsage.t);
+    let initialUsage = ([acc, elt] : [NFT_FA2.TokenUsage.t, nat]) : NFT_FA2.TokenUsage.t => Big_map.add(elt, (0 as nat), acc);
+    let newTokenUsage = List.fold(initialUsage, tokenIds, tokenUsage);
+
+    let tokenMetadata = param.tokenMetas;
+    let operators = (Big_map.empty as NFT_FA2.Storage.Operators.t);
+    
+
+    let initialStorage : extStorage = {
+        ledger:newLedger,
+        operators:operators,
+        token_ids:tokenIds,
+        token_metadata:tokenMetadata,
+        extension : {
+          admin:Tezos.get_sender (),
+          token_usage:newTokenUsage,
+        }
+    };
+
+    let initialDelegate : option<key_hash> = (None() as option<key_hash>);
+    let initialAmount : tez = 1 as tez;
+    let createMyContract = (op : option<key_hash>, ltez : tez, s : extStorage) : [operation, address] => (create_contract_of_file `generic_fa2/compiled/fa2_nft.tz`)(op, ltez, s);
+    let originate : [operation, address] = createMyContract(initialDelegate, initialAmount, initialStorage);
+    // insert into collections
+    let newAllCollections = Big_map.add(originate[1], Tezos.get_sender (), store.allCollections);
+    // insert into ownedCollections
+    let newOwnedCollections = 
+      match (Big_map.find_opt(Tezos.get_sender (), store.ownedCollections)) {
+        when(None()) : Big_map.add( Tezos.get_sender (), (list([originate[1]]) as list<address>), store.ownedCollections);
+        when(Some(addrLst)) : Big_map.update( Tezos.get_sender (), (Some( list([originate[1], ...addrLst]) )), store.ownedCollections);
+      };
+    
+    return [list([originate[0]]), { ...store, allCollections:newAllCollections, ownedCollections:newOwnedCollections}];
+};
+
+@entry
+export const main = (ep: parameter, store: storage) : return_ =>
+    match (ep) { 
+      when(GenerateCollection(p)) : generateCollection(p, store);
+      when(Nothing()) : [(list([]) as list<operation>), store]
+    };
